@@ -142,22 +142,60 @@ function render(html) {
 }
 
 function showHome() {
-  const type = nextSessionType();
-  const session = ROUTINE[type];
+  const nextType = nextSessionType();
+  const active = loadActive();
+  const displayType = active ? active.type : nextType;
+  const session = ROUTINE[displayType];
   const history = loadHistory();
   const last = history[history.length - 1];
-  const active = loadActive();
+
+  let progressDesc = '';
+  if (active) {
+    const curEx = session.exercises[active.exIndex];
+    if (inWarmup(active)) {
+      progressDesc = `Calentamiento ${(active.warmupIndex || 0) + 1} de ${WARMUPS.length} · ${curEx.name}`;
+    } else {
+      progressDesc = `${curEx.name} · Serie ${active.setIndex + 1} de ${curEx.sets}`;
+    }
+  }
 
   render(`
     <div class="screen">
       <div class="logo">LazyGood</div>
-      <div>
-        <div class="home-session">Hoy toca:<br>${session.label}</div>
-        <div class="home-sub">${todayStr()}${last ? ` · última sesión: ${new Date(last.date).toLocaleDateString('es-CO')}` : ''}</div>
-      </div>
+      ${active ? `
+        <div class="card session-progress">
+          <div class="sp-session">${session.label} en curso</div>
+          <div class="sp-step">${progressDesc}</div>
+        </div>
+      ` : `
+        <div>
+          <div class="home-session">Hoy toca:<br>${session.label}</div>
+          <div class="home-sub">${todayStr()}${last ? ` · última sesión: ${new Date(last.date).toLocaleDateString('es-CO')}` : ''}</div>
+        </div>
+      `}
+      <details class="info-box">
+        <summary>¿Cómo elijo el peso y las reps?</summary>
+        <div class="info-content">
+          <p><strong>El rango de reps define tu ciclo de progresión</strong>, no es un número al azar:</p>
+          <ul>
+            <li>Elige un peso e intenta llegar al <strong>tope del rango</strong> (ej. 8 reps).</li>
+            <li>Si solo llegas a 5, bien — la próxima sesión intenta 6, luego 7, luego 8.</li>
+            <li>Cuando logres 8 en <strong>todas</strong> las series → la próxima sesión sube el peso.</li>
+            <li>Con el peso nuevo probablemente llegues a 4-5 → y vuelves a subir rep a rep.</li>
+          </ul>
+          <p><strong>Peso correcto:</strong> las últimas 2-3 reps se sienten duras pero controladas. Podrías hacer 1-2 más si quisieras, pero no más.</p>
+        </div>
+      </details>
       <div class="exercise-list">
-        ${session.exercises.map(ex => `
-          <div class="exercise-row">
+        <div class="exercise-row warmup-card">
+          <div class="warmup-thumb"></div>
+          <div>
+            <div class="ex-name">Calentamiento</div>
+            <div class="ex-scheme">2 series de aproximación · ${session.exercises[0].name}</div>
+          </div>
+        </div>
+        ${session.exercises.map((ex, i) => `
+          <div class="exercise-row${active && active.exIndex === i && !inWarmup(active) ? ' current-ex' : ''}">
             <img src="${ex.imgs[0]}" alt="">
             <div>
               <div class="ex-name">${ex.name}</div>
@@ -166,17 +204,33 @@ function showHome() {
           </div>`).join('')}
       </div>
       <div class="spacer"></div>
-      ${active ? `<button class="btn btn-secondary" id="resume">Continuar sesión en curso</button>` : ''}
-      <button class="btn btn-primary btn-big" id="start">Empezar ${session.label}</button>
+      ${active ? `
+        <button class="btn btn-primary btn-big" id="resume">Retomar sesión</button>
+        <button class="btn btn-secondary" id="start">Empezar sesión nueva</button>
+        <button class="btn btn-ghost" id="cancel">Cancelar sesión actual</button>
+      ` : `
+        <button class="btn btn-primary btn-big" id="start">Empezar ${session.label}</button>
+      `}
       <button class="btn btn-ghost" id="history">Ver historial · Exportar</button>
       <div class="credits">Fotos: <a href="https://github.com/yuhonas/free-exercise-db">free-exercise-db</a> (dominio público) · Diagramas musculares: <a href="https://wger.de">wger.de</a> (CC-BY-SA)</div>
     </div>
   `);
 
-  document.getElementById('start').onclick = () => startWorkout(type);
+  document.getElementById('start').onclick = () => startWorkout(nextType);
   document.getElementById('history').onclick = showHistory;
-  const resume = document.getElementById('resume');
-  if (resume) resume.onclick = () => { const st = loadActive(); showExercise(st); };
+
+  if (active) {
+    document.getElementById('resume').onclick = () => {
+      const st = loadActive();
+      if (st.rest) showRest(st); else showExercise(st);
+    };
+    document.getElementById('cancel').onclick = () => {
+      if (confirm('¿Cancelar la sesión actual? Se perderá el progreso.')) {
+        clearActive();
+        showHome();
+      }
+    };
+  }
 }
 
 function startWorkout(type) {
@@ -209,7 +263,7 @@ function showExercise(state) {
   const doneSets = (state.warmupIndex || 0) + state.log.reduce((n, e) => n + e.sets.length, 0);
 
   render(`
-    <div class="screen">
+    <div class="screen${warmup ? ' warmup-active' : ''}">
       <div class="progress-bar">
         ${Array.from({ length: totalSets }, (_, i) =>
           `<span class="${i < WARMUPS.length ? 'wu ' : ''}${i < doneSets ? 'done' : i === doneSets ? 'current' : ''}"></span>`).join('')}
@@ -220,17 +274,9 @@ function showExercise(state) {
         <div class="pattern">${ex.pattern} · ejercicio ${state.exIndex + 1} de ${session.exercises.length}</div>
       </div>
       <img class="demo" id="demo" src="${ex.imgs[0]}" alt="Demostración de ${ex.name}">
-      <div class="muscles-block">
-        <div class="muscle-maps">${muscleMapsHTML(ex)}</div>
-        <div class="muscles">
-          <div><strong>${ex.musclesMain}</strong></div>
-          <div class="support">apoyo: ${ex.musclesSupport}</div>
-          <div class="legend"><span class="dot main"></span> principal <span class="dot sec"></span> apoyo</div>
-        </div>
-      </div>
       ${warmup ? `
       <div class="set-info">
-        <span class="set-label warmup-label">🔥 Calentamiento ${(state.warmupIndex || 0) + 1} de ${WARMUPS.length}</span>
+        <span class="set-label warmup-label">Calentamiento ${(state.warmupIndex || 0) + 1} de ${WARMUPS.length}</span>
         <span class="rep-target">${warmup.reps} reps ligeras</span>
       </div>
       <div class="suggestion warmup">Serie de aproximación: <strong>${warmup.label}</strong> (~${defaultWeight} kg). Sirve para calentar y ensayar la técnica — no cuenta para el registro.</div>` : `
@@ -261,9 +307,17 @@ function showExercise(state) {
           </div>
         </div>
       </div>
-      <button class="btn btn-primary btn-big" id="done-set">${warmup ? '✓ Calentamiento hecho' : '✓ Serie hecha'}</button>
-      ${state.rest ? '<button class="btn btn-ghost" id="back-rest">↩ Volver al descanso</button>' : ''}
+      <button class="btn btn-primary btn-big" id="done-set">${warmup ? 'Calentamiento hecho' : 'Serie hecha'}</button>
+      ${state.rest ? '<button class="btn btn-ghost" id="back-rest">Volver al descanso</button>' : ''}
       <button class="btn btn-ghost" id="abort">Salir de la sesión</button>
+      <div class="muscles-bottom">
+        <div class="muscle-maps">${muscleMapsHTML(ex)}</div>
+        <div class="muscles">
+          <div><strong>${ex.musclesMain}</strong></div>
+          <div class="support">apoyo: ${ex.musclesSupport}</div>
+          <div class="legend"><span class="dot main"></span> principal <span class="dot sec"></span> apoyo</div>
+        </div>
+      </div>
     </div>
   `);
 
@@ -314,9 +368,7 @@ function showExercise(state) {
     showRest(state);
   };
 
-  document.getElementById('abort').onclick = () => {
-    if (confirm('¿Salir? La sesión quedará guardada para continuar después.')) showHome();
-  };
+  document.getElementById('abort').onclick = () => showHome();
 }
 
 let restInterval = null;
@@ -338,13 +390,13 @@ function showRest(state) {
       <div class="rest-title">${state.rest.change ? 'Descansa antes del siguiente ejercicio' : 'Descansa'}</div>
       <div class="rest-clock" id="clock">--:--</div>
       <div class="rest-ring"><div id="ring" style="width:100%"></div></div>
-      <div class="rest-hint">🚶 Camina mientras tanto — suma pasos</div>
+      <div class="rest-hint">Camina mientras tanto — suma pasos</div>
       <div class="rest-next">Sigue: <strong>${nextEx.name}</strong> · ${inWarmup(state) ? `Calentamiento ${(state.warmupIndex || 0) + 1} de ${WARMUPS.length}` : `Serie ${state.setIndex + 1} de ${nextEx.sets}`}</div>
       <div class="rest-note">Al llegar a 0 pasa solo al siguiente ejercicio</div>
       <div class="spacer"></div>
       <div class="rest-actions">
         <button class="btn btn-secondary" id="plus30">+30 s</button>
-        <button class="btn btn-primary" id="skip">Saltar descanso →</button>
+        <button class="btn btn-primary" id="skip">Saltar descanso</button>
       </div>
     </div>
   `);
@@ -393,7 +445,7 @@ function finishWorkout(state) {
   render(`
     <div class="screen center">
       <div class="spacer"></div>
-      <div class="done-emoji">💪</div>
+      <div class="done-emoji">✓</div>
       <h2>${ROUTINE[state.type].label} completada</h2>
       <p class="muted">Próxima vez: Sesión ${state.type === 'A' ? 'B' : 'A'}</p>
       <div class="card">
