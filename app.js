@@ -225,18 +225,13 @@ function showHome() {
       if (st.rest) showRest(st); else showExercise(st);
     };
     document.getElementById('cancel').onclick = () => {
-      if (confirm('¿Cancelar la sesión actual? Se perderá el progreso.')) {
-        clearActive();
-        showHome();
-      }
+      clearActive();
+      showHome();
     };
   }
 }
 
 function startWorkout(type) {
-  if (loadActive() && !confirm('Hay una sesión sin terminar. ¿Empezar una nueva y descartarla?')) {
-    return;
-  }
   const state = {
     type,
     startedAt: new Date().toISOString(),
@@ -299,7 +294,7 @@ function showExercise(state) {
           </div>
         </div>
         <div class="input-group">
-          <label>Reps hechas</label>
+          <label>Reps</label>
           <div class="stepper">
             <button id="r-minus">−</button>
             <input id="reps" type="number" inputmode="numeric" value="${defaultReps}">
@@ -393,7 +388,6 @@ function showRest(state) {
       <div class="rest-hint">Camina mientras tanto — suma pasos</div>
       <div class="rest-next">Sigue: <strong>${nextEx.name}</strong> · ${inWarmup(state) ? `Calentamiento ${(state.warmupIndex || 0) + 1} de ${WARMUPS.length}` : `Serie ${state.setIndex + 1} de ${nextEx.sets}`}</div>
       <div class="rest-note">Al llegar a 0 pasa solo al siguiente ejercicio</div>
-      <div class="spacer"></div>
       <div class="rest-actions">
         <button class="btn btn-secondary" id="plus30">+30 s</button>
         <button class="btn btn-primary" id="skip">Saltar descanso</button>
