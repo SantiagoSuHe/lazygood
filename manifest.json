@@ -3,8 +3,8 @@
   "short_name": "LazyGood",
   "start_url": ".",
   "display": "standalone",
-  "background_color": "#0f1115",
-  "theme_color": "#0f1115",
+  "background_color": "#EEF0F4",
+  "theme_color": "#EEF0F4",
   "description": "Rutina full-body de 2 días — solo seguir, sin pensar.",
   "icons": []
 }

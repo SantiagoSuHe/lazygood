@@ -29,27 +29,53 @@ function lastPerformance(exerciseId) {
   return null;
 }
 
+// Load unit: the Forma machines have no kg readout — you log the pin level
+// ("palito"), a whole number stepping by 1. Free weights stay in kg (step 2.5).
+function unitInfo(ex) {
+  if (ex && ex.unit === 'nivel') return {
+    inputLabel: 'Nivel (palito)',
+    inputMode: 'numeric',
+    defaultStart: 4,
+    short: 'niveles',
+    round: x => Math.max(0, Math.round(x))
+  };
+  return {
+    inputLabel: 'Peso (kg)',
+    inputMode: 'decimal',
+    defaultStart: 20,
+    short: 'kg',
+    round: x => Math.max(0, Math.round(x / 2.5) * 2.5)
+  };
+}
+
 // Double progression: if every set of the last session hit the top of the
-// rep range, suggest adding weight; otherwise suggest beating last numbers.
+// rep range, suggest adding load; otherwise suggest beating last numbers.
 function suggestionFor(ex) {
+  const isLevel = ex.unit === 'nivel';
   const last = lastPerformance(ex.id);
   if (!last) {
+    const start = isLevel
+      ? `Empieza en un <strong>nivel bajo</strong> (prueba ${unitInfo(ex).defaultStart}-${unitInfo(ex).defaultStart + 1})`
+      : `Empieza <strong>liviano</strong>`;
     return { type: 'new', weight: null,
-      html: `Primera vez con este ejercicio. Empieza <strong>liviano</strong>, aprende el movimiento y deja 1-2 reps en reserva.` };
+      html: `Primera vez con este ejercicio. ${start}, aprende el movimiento y deja 1-2 reps en reserva.` };
   }
   const maxWeight = Math.max(...last.sets.map(s => s.weight));
   const allTopped = last.sets.every(s => s.reps >= ex.repMax);
   if (allTopped) {
     const next = maxWeight + ex.increment;
+    const action = isLevel ? `<strong>Sube al nivel ${next}</strong>` : `<strong>Sube a ${next} kg</strong>`;
     return { type: 'up', weight: next,
-      html: `La vez pasada llegaste al tope (${formatSets(last.sets)}). <strong>Sube a ${next} kg</strong> y vuelve a ${ex.repMin}-${ex.repMin + 1} reps.` };
+      html: `La vez pasada llegaste al tope (${formatSets(last.sets, ex.unit)}). ${action} y vuelve a ${ex.repMin}-${ex.repMin + 1} reps.` };
   }
+  const action = isLevel ? 'Iguala el nivel y supera las reps' : 'Iguala el peso y supera las reps';
   return { type: 'beat', weight: maxWeight,
-    html: `La vez pasada: ${formatSets(last.sets)}. <strong>Iguala el peso y supera las reps</strong>, aunque sea por una.` };
+    html: `La vez pasada: ${formatSets(last.sets, ex.unit)}. <strong>${action}</strong>, aunque sea por una.` };
 }
 
-function formatSets(sets) {
-  return sets.map(s => `${s.weight}kg×${s.reps}`).join(' · ');
+function formatSets(sets, unit) {
+  const fmt = unit === 'nivel' ? (w => `N${w}`) : (w => `${w}kg`);
+  return sets.map(s => `${fmt(s.weight)}×${s.reps}`).join(' · ');
 }
 
 // ---------- muscle diagrams (wger.de SVGs, CC-BY-SA) ----------
@@ -80,10 +106,6 @@ const WARMUPS = [
   { pct: 0.75, reps: 4, label: '~75% del peso de trabajo' }
 ];
 const WARMUP_REST_SEC = 60;
-
-function round25(x) {
-  return Math.max(0, Math.round(x / 2.5) * 2.5);
-}
 
 function inWarmup(state) {
   return state.exIndex === 0 && state.setIndex === 0 && (state.warmupIndex || 0) < WARMUPS.length;
@@ -238,7 +260,7 @@ function startWorkout(type) {
     exIndex: 0,
     setIndex: 0,
     warmupIndex: 0,
-    log: ROUTINE[type].exercises.map(ex => ({ id: ex.id, name: ex.name, sets: [] }))
+    log: ROUTINE[type].exercises.map(ex => ({ id: ex.id, name: ex.name, unit: ex.unit || 'kg', sets: [] }))
   };
   saveActive(state);
   showExercise(state);
@@ -248,33 +270,49 @@ function showExercise(state) {
   const session = ROUTINE[state.type];
   const ex = session.exercises[state.exIndex];
   const sug = suggestionFor(ex);
+  const u = unitInfo(ex);
   const warmup = inWarmup(state) ? WARMUPS[state.warmupIndex || 0] : null;
-  const workWeight = sug.weight || 20;
+  const workWeight = sug.weight || u.defaultStart;
   const prevSet = state.log[state.exIndex].sets[state.setIndex - 1];
-  const defaultWeight = warmup ? round25(workWeight * warmup.pct)
+  const defaultWeight = warmup ? u.round(workWeight * warmup.pct)
     : (prevSet ? prevSet.weight : workWeight);
   const defaultReps = warmup ? warmup.reps : ex.repMin;
-  const totalSets = WARMUPS.length + session.exercises.reduce((n, e) => n + e.sets, 0);
   const doneSets = (state.warmupIndex || 0) + state.log.reduce((n, e) => n + e.sets.length, 0);
 
+  // One progress segment per set; each exercise gets its own color so the bar
+  // shows at a glance which exercise you're on. Warm-ups share one color.
+  const segments = [];
+  for (let i = 0; i < WARMUPS.length; i++) segments.push({ wu: true });
+  session.exercises.forEach((e, ei) => { for (let s = 0; s < e.sets; s++) segments.push({ ex: ei }); });
+
   render(`
-    <div class="screen${warmup ? ' warmup-active' : ''}">
+    <div class="screen workout${warmup ? ' warmup-active' : ''}">
       <div class="progress-bar">
-        ${Array.from({ length: totalSets }, (_, i) =>
-          `<span class="${i < WARMUPS.length ? 'wu ' : ''}${i < doneSets ? 'done' : i === doneSets ? 'current' : ''}"></span>`).join('')}
+        ${segments.map((seg, i) => {
+          const color = seg.wu ? 'wu' : 'ex' + (seg.ex % 6);
+          const status = i < doneSets ? ' done' : i === doneSets ? ' current' : '';
+          return `<span class="${color}${status}"></span>`;
+        }).join('')}
       </div>
       <div class="ex-header">
         <div class="machine">${ex.machine}</div>
         <h2>${ex.name}</h2>
         <div class="pattern">${ex.pattern} · ejercicio ${state.exIndex + 1} de ${session.exercises.length}</div>
       </div>
-      <img class="demo" id="demo" src="${ex.imgs[0]}" alt="Demostración de ${ex.name}">
+      ${ex.youtubeId
+        ? `<div class="demo demo-video" style="background-image:url('${ex.imgs[0]}')">
+             <iframe src="https://www.youtube-nocookie.com/embed/${ex.youtubeId}?autoplay=1&mute=1&loop=1&playlist=${ex.youtubeId}&controls=0&playsinline=1&modestbranding=1&rel=0&fs=0"
+               title="Demostración de ${ex.name}" loading="lazy"
+               allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+             <div class="demo-shield" aria-hidden="true"></div>
+           </div>`
+        : `<img class="demo" id="demo" src="${ex.imgs[0]}" alt="Demostración de ${ex.name}">`}
       ${warmup ? `
       <div class="set-info">
         <span class="set-label warmup-label">Calentamiento ${(state.warmupIndex || 0) + 1} de ${WARMUPS.length}</span>
         <span class="rep-target">${warmup.reps} reps ligeras</span>
       </div>
-      <div class="suggestion warmup">Serie de aproximación: <strong>${warmup.label}</strong> (~${defaultWeight} kg). Sirve para calentar y ensayar la técnica — no cuenta para el registro.</div>` : `
+      <div class="suggestion warmup">Serie de aproximación: <strong>${warmup.label}</strong> (~${defaultWeight} ${u.short}). Sirve para calentar y ensayar la técnica — no cuenta para el registro.</div>` : `
       <div class="set-info">
         <span class="set-label">Serie ${state.setIndex + 1} de ${ex.sets}</span>
         <span class="rep-target">${ex.repMin}-${ex.repMax} reps${ex.unilateral ? ' /pierna' : ''}</span>
@@ -286,10 +324,10 @@ function showExercise(state) {
       </details>
       <div class="inputs">
         <div class="input-group">
-          <label>Peso (kg)</label>
+          <label>${u.inputLabel}</label>
           <div class="stepper">
             <button id="w-minus">−</button>
-            <input id="weight" type="number" inputmode="decimal" step="2.5" value="${defaultWeight}">
+            <input id="weight" type="number" inputmode="${u.inputMode}" step="${ex.increment}" value="${defaultWeight}">
             <button id="w-plus">+</button>
           </div>
         </div>
@@ -316,12 +354,13 @@ function showExercise(state) {
     </div>
   `);
 
-  animateDemo(document.getElementById('demo'), ex.imgs);
+  const demoImg = document.getElementById('demo');
+  if (demoImg) animateDemo(demoImg, ex.imgs);   // image fallback only; video exercises have no #demo
 
   const weightInput = document.getElementById('weight');
   const repsInput = document.getElementById('reps');
-  document.getElementById('w-minus').onclick = () => weightInput.value = Math.max(0, parseFloat(weightInput.value || 0) - 2.5);
-  document.getElementById('w-plus').onclick = () => weightInput.value = parseFloat(weightInput.value || 0) + 2.5;
+  document.getElementById('w-minus').onclick = () => weightInput.value = Math.max(0, parseFloat(weightInput.value || 0) - ex.increment);
+  document.getElementById('w-plus').onclick = () => weightInput.value = parseFloat(weightInput.value || 0) + ex.increment;
   document.getElementById('r-minus').onclick = () => repsInput.value = Math.max(0, parseInt(repsInput.value || 0) - 1);
   document.getElementById('r-plus').onclick = () => repsInput.value = parseInt(repsInput.value || 0) + 1;
 
@@ -389,7 +428,7 @@ function showRest(state) {
       <div class="rest-next">Sigue: <strong>${nextEx.name}</strong> · ${inWarmup(state) ? `Calentamiento ${(state.warmupIndex || 0) + 1} de ${WARMUPS.length}` : `Serie ${state.setIndex + 1} de ${nextEx.sets}`}</div>
       <div class="rest-note">Al llegar a 0 pasa solo al siguiente ejercicio</div>
       <div class="rest-actions">
-        <button class="btn btn-secondary" id="plus30">+30 s</button>
+        <button class="btn btn-secondary" id="minus30">−30 s</button>
         <button class="btn btn-primary" id="skip">Saltar descanso</button>
       </div>
     </div>
@@ -416,9 +455,9 @@ function showRest(state) {
   restInterval = setInterval(tick, 1000);
   tick();
 
-  document.getElementById('plus30').onclick = () => {
-    state.rest.endAt += 30 * 1000;
-    state.rest.total += 30;
+  document.getElementById('minus30').onclick = () => {
+    state.rest.endAt -= 30 * 1000;
+    state.rest.total = Math.max(1, state.rest.total - 30);
     saveActive(state);
     tick();
   };
@@ -445,7 +484,7 @@ function finishWorkout(state) {
       <div class="card">
         <table class="summary">
           <tr><th>Ejercicio</th><th style="text-align:right">Series</th></tr>
-          ${state.log.map(e => `<tr><td>${e.name}</td><td class="sets">${formatSets(e.sets)}</td></tr>`).join('')}
+          ${state.log.map(e => `<tr><td>${e.name}</td><td class="sets">${formatSets(e.sets, e.unit)}</td></tr>`).join('')}
         </table>
       </div>
       <div class="spacer"></div>
@@ -469,7 +508,7 @@ function showHistory() {
       ${history.map(s => `
         <div class="card history-item">
           <div class="h-date">${ROUTINE[s.type].label} — ${new Date(s.date).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
-          <div class="h-sets">${s.exercises.map(e => `${e.name}: ${formatSets(e.sets) || '—'}`).join('<br>')}</div>
+          <div class="h-sets">${s.exercises.map(e => `${e.name}: ${formatSets(e.sets, e.unit) || '—'}`).join('<br>')}</div>
         </div>`).join('')}
     </div>
   `);
