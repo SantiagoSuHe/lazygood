@@ -1,1 +1,5 @@
 .DS_Store
+
+# Playwright test screenshots / snapshot dumps
+.playwright-artifacts/
+.playwright-mcp/
