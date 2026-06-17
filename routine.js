@@ -95,7 +95,7 @@ const ROUTINE = {
         restSec: 150,
         increment: 2.5,
         unilateral: true,
-        imgs: ['img/Romanian_Deadlift_0.jpg', 'img/Romanian_Deadlift_1.jpg'],
+        imgs: ['img/Kettlebell_One-Legged_Deadlift_0.jpg', 'img/Kettlebell_One-Legged_Deadlift_1.jpg'],
         cues: [
           'Mancuerna en la mano contraria a la pierna que trabaja.',
           'Empuja la cadera atrás y deja que la pierna libre suba detrás.',
@@ -147,7 +147,7 @@ const ROUTINE = {
         increment: 1,
         unilateral: false,
         unit: 'nivel',
-        imgs: ['img/Standing_Military_Press_0.jpg', 'img/Standing_Military_Press_1.jpg'],
+        imgs: ['img/Leverage_Shoulder_Press_0.jpg', 'img/Leverage_Shoulder_Press_1.jpg'],
         cues: [
           'Ajusta el asiento para que los agarres queden a la altura de los hombros.',
           'Aprieta abdomen y glúteos: nada de arquear la espalda.',
@@ -194,7 +194,7 @@ const ROUTINE = {
         restSec: 150,
         increment: 2.5,
         unilateral: false,
-        imgs: ['img/Romanian_Deadlift_0.jpg', 'img/Romanian_Deadlift_1.jpg'],
+        imgs: ['img/Stiff-Legged_Dumbbell_Deadlift_0.jpg', 'img/Stiff-Legged_Dumbbell_Deadlift_1.jpg'],
         cues: [
           'Una mancuerna en cada mano frente a los muslos, rodillas apenas flexionadas.',
           'Empuja la cadera hacia atrás; las mancuernas bajan rozando las piernas.',
