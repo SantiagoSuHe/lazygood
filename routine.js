@@ -25,6 +25,7 @@ const ROUTINE = {
         increment: 2.5,
         unilateral: false,
         imgs: ['img/Goblet_Squat_0.jpg', 'img/Goblet_Squat_1.jpg'],
+        machineImg: 'img/gym/mancuernas.jpg',
         cues: [
           'Abraza una mancuerna contra el pecho, codos apuntando al suelo.',
           'Baja entre los pies hasta que los muslos queden paralelos o más.',
@@ -49,6 +50,7 @@ const ROUTINE = {
         unilateral: false,
         unit: 'nivel',
         imgs: ['img/Leverage_Chest_Press_0.jpg', 'img/Leverage_Chest_Press_1.jpg'],
+        machineImg: 'img/gym/forma_press.jpg',
         cues: [
           'Ajusta el asiento: agarres a la altura del pecho.',
           'Saca el pecho y junta ligeramente las escápulas.',
@@ -73,6 +75,7 @@ const ROUTINE = {
         unilateral: false,
         unit: 'nivel',
         imgs: ['img/Wide-Grip_Lat_Pulldown_0.jpg', 'img/Wide-Grip_Lat_Pulldown_1.jpg'],
+        machineImg: 'img/gym/forma_poleas.jpg',
         cues: [
           'Fija los muslos bajo los soportes; agarre más ancho que los hombros.',
           'Lleva la barra hacia la parte alta del pecho, codos hacia abajo.',
@@ -96,6 +99,7 @@ const ROUTINE = {
         increment: 2.5,
         unilateral: true,
         imgs: ['img/Kettlebell_One-Legged_Deadlift_0.jpg', 'img/Kettlebell_One-Legged_Deadlift_1.jpg'],
+        machineImg: 'img/gym/mancuernas.jpg',
         cues: [
           'Mancuerna en la mano contraria a la pierna que trabaja.',
           'Empuja la cadera atrás y deja que la pierna libre suba detrás.',
@@ -124,6 +128,7 @@ const ROUTINE = {
         increment: 2.5,
         unilateral: true,
         imgs: ['img/Split_Squat_with_Dumbbells_0.jpg', 'img/Split_Squat_with_Dumbbells_1.jpg'],
+        machineImg: 'img/gym/mancuernas.jpg',
         cues: [
           'Empeine del pie trasero apoyado en el banco, una mancuerna en cada mano.',
           'Baja vertical hasta que el muslo delantero quede paralelo.',
@@ -148,6 +153,7 @@ const ROUTINE = {
         unilateral: false,
         unit: 'nivel',
         imgs: ['img/Leverage_Shoulder_Press_0.jpg', 'img/Leverage_Shoulder_Press_1.jpg'],
+        machineImg: 'img/gym/forma_press.jpg',
         cues: [
           'Ajusta el asiento para que los agarres queden a la altura de los hombros.',
           'Aprieta abdomen y glúteos: nada de arquear la espalda.',
@@ -172,6 +178,7 @@ const ROUTINE = {
         unilateral: false,
         unit: 'nivel',
         imgs: ['img/Seated_Cable_Rows_0.jpg', 'img/Seated_Cable_Rows_1.jpg'],
+        machineImg: 'img/gym/forma_poleas.jpg',
         cues: [
           'Pecho arriba, espalda recta, rodillas algo flexionadas.',
           'Jala el agarre hacia el abdomen, codos pegados al cuerpo.',
@@ -195,6 +202,7 @@ const ROUTINE = {
         increment: 2.5,
         unilateral: false,
         imgs: ['img/Stiff-Legged_Dumbbell_Deadlift_0.jpg', 'img/Stiff-Legged_Dumbbell_Deadlift_1.jpg'],
+        machineImg: 'img/gym/mancuernas.jpg',
         cues: [
           'Una mancuerna en cada mano frente a los muslos, rodillas apenas flexionadas.',
           'Empuja la cadera hacia atrás; las mancuernas bajan rozando las piernas.',

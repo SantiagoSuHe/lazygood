@@ -328,45 +328,65 @@ details[open].info-box summary::before { content: '–'; }
 }
 .ex-header .pattern { font-size: 0.82rem; color: var(--dim); margin-top: 4px; }
 
-.demo {
-  flex: 1; min-height: 0; max-height: 200px;
-  width: 100%; object-fit: contain;
-  background: var(--surface);
+/* Demo carousel: a vertical 9:16 card (sized to the YouTube Short), centered
+   and height-capped so the set controls + CTA stay visible. Swipe or tap the
+   dots to move between video → gif → gym-machine photo. */
+.demo-carousel {
+  flex: none;
+  width: 100%;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.demo-track {
+  width: 100%;
+  height: min(54dvh, 470px);   /* default; JS sets it per active slide */
+  display: flex;
+  overflow-x: auto; overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
   border-radius: var(--r);
+  background: var(--surface);
   box-shadow: var(--shadow-sm);
   border: 1px solid var(--sep);
-  padding: 6px;
+  transition: height 0.25s ease;
 }
-
-/* YouTube Shorts demo: vertical 9:16 card, centered, height-capped so the
-   set controls + CTA stay visible. The start image sits behind as an
-   offline poster. */
-.demo.demo-video {
-  flex: none;
-  align-self: center;
+.demo-track::-webkit-scrollbar { display: none; }
+.demo-slide {
   position: relative;
-  height: min(56dvh, 480px);   /* definite height → width derives from 9:16 */
-  max-height: min(56dvh, 480px);   /* override .demo's 200px cap */
-  aspect-ratio: 9 / 16;
-  width: auto; max-width: 100%;
-  padding: 0;
-  overflow: hidden;
-  background-color: var(--surface);
-  background-size: cover;
-  background-position: center;
-}
-.demo-video iframe {
-  position: absolute; inset: 0;
+  flex: 0 0 100%;
   width: 100%; height: 100%;
-  border: 0; display: block;
+  scroll-snap-align: center;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
 }
-/* transparent layer over the video: lets a swipe scroll the page (the iframe
-   would otherwise swallow the touch) and blocks accidental taps to YouTube */
-.demo-shield {
-  position: absolute; inset: 0; z-index: 2;
-  background: transparent;
-  touch-action: pan-y;
+/* portrait Short: fills the tall box, centered, width derived from 9:16 */
+.demo-iframe {
+  height: 100%; aspect-ratio: 9 / 16;
+  width: auto; max-width: 100%;
+  border: 0; display: block; margin: 0 auto;
 }
+/* gif & gym photo: shown whole at natural orientation (the box height is sized
+   to match, so landscape images fill the full width with no letterboxing) */
+.demo-img { width: 100%; height: 100%; object-fit: contain; padding: 6px; }
+/* slide label chip */
+.demo-cap {
+  position: absolute; top: 8px; left: 8px; z-index: 3;
+  font-family: var(--font-head);
+  font-size: 0.6rem; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  background: rgba(10,12,16,0.6); color: #fff;
+  padding: 4px 9px; border-radius: var(--pill);
+  pointer-events: none;
+}
+.demo-dots { display: flex; gap: 7px; justify-content: center; align-items: center; }
+.demo-dots .dot {
+  width: 8px; height: 8px; padding: 0;
+  border: none; border-radius: 50%;
+  background: var(--surface-3); cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+.demo-dots .dot.active { background: var(--accent); transform: scale(1.3); }
 
 /* set info */
 .set-info {
@@ -475,7 +495,7 @@ details[open].cues-box summary::before { content: '– '; }
 
 /* warmup active screen */
 .warmup-active .ex-header h2  { color: var(--blue); }
-.warmup-active .demo          { border-color: rgba(37,99,235,0.3); }
+.warmup-active .demo-track    { border-color: rgba(37,99,235,0.3); }
 .warmup-active .btn-primary {
   background: linear-gradient(180deg, #3B82F6, var(--blue));
   color: #fff;

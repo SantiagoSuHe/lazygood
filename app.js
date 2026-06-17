@@ -138,6 +138,83 @@ function animateDemo(imgEl, frames) {
   }, 900);
 }
 
+// ---------- demo carousel (video → gif → gym machine photo) ----------
+
+// Swipeable carousel: slide 1 the YouTube Short (controls on so it can be
+// paused/scrubbed), slide 2 the cross-fading start/end gif (#demo, animated by
+// animateDemo), slide 3 a photo of the actual machine in the building's gym.
+// Slides with no source are skipped. Wired up by wireDemoCarousel().
+function demoCarouselHTML(ex) {
+  const slides = [];
+  if (ex.youtubeId) {
+    slides.push({ label: 'Video', html: `
+      <iframe class="demo-iframe"
+        src="https://www.youtube-nocookie.com/embed/${ex.youtubeId}?autoplay=1&mute=1&loop=1&playlist=${ex.youtubeId}&controls=1&playsinline=1&modestbranding=1&rel=0"
+        title="Demostración de ${ex.name}" loading="lazy"
+        allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>` });
+  }
+  slides.push({ label: 'Animación', html: `<img class="demo-img" id="demo" src="${ex.imgs[0]}" alt="Animación de ${ex.name}">` });
+  if (ex.machineImg) {
+    slides.push({ label: 'Tu máquina', html: `<img class="demo-img demo-machine" src="${ex.machineImg}" alt="Máquina del gym para ${ex.name}">` });
+  }
+
+  return `
+    <div class="demo-carousel">
+      <div class="demo-track" id="demo-track">
+        ${slides.map(s => `<div class="demo-slide"><span class="demo-cap">${s.label}</span>${s.html}</div>`).join('')}
+      </div>
+      ${slides.length > 1 ? `<div class="demo-dots" id="demo-dots">
+        ${slides.map((s, i) => `<button class="dot${i === 0 ? ' active' : ''}" data-i="${i}" aria-label="${s.label}"></button>`).join('')}
+      </div>` : ''}
+    </div>`;
+}
+
+let demoResizeHandler = null;
+
+function wireDemoCarousel() {
+  const track = document.getElementById('demo-track');
+  if (!track) return;
+  const slides = [...track.querySelectorAll('.demo-slide')];
+  const dots = [...document.querySelectorAll('#demo-dots .dot')];
+
+  // The track adapts its height to the slide you're on: the portrait Short
+  // fills a tall 9:16 box, while a landscape gif / gym photo fills the full
+  // width at its natural shape (no letterboxing). Capped so the controls below
+  // stay visible.
+  const maxH = () => Math.min(window.innerHeight * 0.54, 470);
+  const sizeFor = (i) => {
+    const media = slides[i] && slides[i].querySelector('img, iframe');
+    if (media && media.tagName === 'IMG' && media.naturalWidth) {
+      const ar = media.naturalWidth / media.naturalHeight;   // >1 landscape, <1 portrait
+      return Math.max(180, Math.min(maxH(), Math.round(track.clientWidth / ar)));
+    }
+    return maxH();   // video, or image not loaded yet → full portrait height
+  };
+  const current = () => Math.round(track.scrollLeft / track.clientWidth);
+  const applyHeight = () => { track.style.height = sizeFor(current()) + 'px'; };
+
+  // images may not be measured at first paint — resize once they load
+  slides.forEach((s, i) => {
+    const img = s.querySelector('img');
+    if (img && !img.complete) img.addEventListener('load', () => { if (current() === i) applyHeight(); }, { once: true });
+  });
+
+  const onScroll = () => {
+    const i = current();
+    dots.forEach((d, di) => d.classList.toggle('active', di === i));
+    applyHeight();
+  };
+  let t;
+  track.addEventListener('scroll', () => { clearTimeout(t); t = setTimeout(onScroll, 60); });
+  dots.forEach(d => d.onclick = () => track.scrollTo({ left: (+d.dataset.i) * track.clientWidth, behavior: 'smooth' }));
+
+  if (demoResizeHandler) window.removeEventListener('resize', demoResizeHandler);
+  demoResizeHandler = applyHeight;
+  window.addEventListener('resize', demoResizeHandler);
+
+  applyHeight();
+}
+
 // ---------- audio / haptics ----------
 
 function notifyRestOver() {
@@ -388,14 +465,7 @@ function showExercise(state) {
         <h2>${ex.name}</h2>
         <div class="pattern">${ex.pattern} · ejercicio ${state.exIndex + 1} de ${session.exercises.length}</div>
       </div>
-      ${ex.youtubeId
-        ? `<div class="demo demo-video" style="background-image:url('${ex.imgs[0]}')">
-             <iframe src="https://www.youtube-nocookie.com/embed/${ex.youtubeId}?autoplay=1&mute=1&loop=1&playlist=${ex.youtubeId}&controls=0&playsinline=1&modestbranding=1&rel=0&fs=0"
-               title="Demostración de ${ex.name}" loading="lazy"
-               allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
-             <div class="demo-shield" aria-hidden="true"></div>
-           </div>`
-        : `<img class="demo" id="demo" src="${ex.imgs[0]}" alt="Demostración de ${ex.name}">`}
+      ${demoCarouselHTML(ex)}
       ${warmup ? `
       <div class="set-info">
         <span class="set-label warmup-label">Calentamiento ${(state.warmupIndex || 0) + 1} de ${WARMUPS.length}</span>
@@ -406,7 +476,7 @@ function showExercise(state) {
         <span class="set-label">Serie ${state.setIndex + 1} de ${ex.sets}</span>
         <span class="rep-target">${ex.repMin}-${ex.repMax} reps${ex.unilateral ? ' /pierna' : ''}</span>
       </div>
-      <div class="suggestion ${sug.type === 'up' ? 'up' : ''}">${sug.html}</div>`}
+      ${sug.type === 'new' ? '' : `<div class="suggestion ${sug.type === 'up' ? 'up' : ''}">${sug.html}</div>`}`}
       <details class="cues-box">
         <summary>Cómo se hace</summary>
         <ul class="cues">${ex.cues.map(c => `<li>${c}</li>`).join('')}</ul>
@@ -442,7 +512,8 @@ function showExercise(state) {
   `);
 
   const demoImg = document.getElementById('demo');
-  if (demoImg) animateDemo(demoImg, ex.imgs);   // image fallback only; video exercises have no #demo
+  if (demoImg) animateDemo(demoImg, ex.imgs);   // animates the "gif" slide
+  wireDemoCarousel();
 
   const weightInput = document.getElementById('weight');
   const repsInput = document.getElementById('reps');
