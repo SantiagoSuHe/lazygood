@@ -163,10 +163,14 @@ function render(html) {
   app.innerHTML = html;
 }
 
+// Which session the home screen is previewing. Defaults to the A/B
+// alternation pick, but the user can override it with the toggle.
+let selectedType = null;
+
 function showHome() {
   const nextType = nextSessionType();
   const active = loadActive();
-  const displayType = active ? active.type : nextType;
+  const displayType = active ? active.type : (selectedType || nextType);
   const session = ROUTINE[displayType];
   const history = loadHistory();
   const last = history[history.length - 1];
@@ -191,8 +195,11 @@ function showHome() {
         </div>
       ` : `
         <div>
-          <div class="home-session">Hoy toca:<br>${session.label}</div>
-          <div class="home-sub">${todayStr()}${last ? ` · última sesión: ${new Date(last.date).toLocaleDateString('es-CO')}` : ''}</div>
+          <div class="seg-control" role="tablist" aria-label="Elegir sesión">
+            <button class="seg${displayType === 'A' ? ' active' : ''}" id="seg-A" role="tab" aria-selected="${displayType === 'A'}">Sesión A</button>
+            <button class="seg${displayType === 'B' ? ' active' : ''}" id="seg-B" role="tab" aria-selected="${displayType === 'B'}">Sesión B</button>
+          </div>
+          <div class="home-sub">${todayStr()}${last ? ` · última: ${new Date(last.date).toLocaleDateString('es-CO')}` : ''} · recomendada hoy: <strong>Sesión ${nextType}</strong></div>
         </div>
       `}
       <details class="info-box">
@@ -209,7 +216,7 @@ function showHome() {
         </div>
       </details>
       <div class="exercise-list">
-        <div class="exercise-row warmup-card">
+        <div class="exercise-row warmup-card tappable" id="row-warmup" role="button" tabindex="0">
           <div class="warmup-thumb"></div>
           <div>
             <div class="ex-name">Calentamiento</div>
@@ -217,14 +224,16 @@ function showHome() {
           </div>
         </div>
         ${session.exercises.map((ex, i) => `
-          <div class="exercise-row${active && active.exIndex === i && !inWarmup(active) ? ' current-ex' : ''}">
+          <div class="exercise-row tappable${active && active.exIndex === i && !inWarmup(active) ? ' current-ex' : ''}" id="row-${i}" role="button" tabindex="0">
             <img src="${ex.imgs[0]}" alt="">
             <div>
               <div class="ex-name">${ex.name}</div>
               <div class="ex-scheme">${ex.sets} × ${ex.repMin}-${ex.repMax} reps${ex.unilateral ? ' por pierna' : ''}</div>
             </div>
+            <span class="row-go" aria-hidden="true">›</span>
           </div>`).join('')}
       </div>
+      <div class="list-hint">${active ? 'Toca un ejercicio para saltar a él' : 'Toca un ejercicio para empezar ahí'}</div>
       <div class="spacer"></div>
       ${active ? `
         <button class="btn btn-primary btn-big" id="resume">Retomar sesión</button>
@@ -238,7 +247,7 @@ function showHome() {
     </div>
   `);
 
-  document.getElementById('start').onclick = () => startWorkout(nextType);
+  document.getElementById('start').onclick = () => startWorkout(displayType);
   document.getElementById('history').onclick = showHistory;
 
   if (active) {
@@ -250,18 +259,50 @@ function showHome() {
       clearActive();
       showHome();
     };
+  } else {
+    // A/B toggle — overrides the alternation pick for this preview.
+    document.getElementById('seg-A').onclick = () => { selectedType = 'A'; showHome(); };
+    document.getElementById('seg-B').onclick = () => { selectedType = 'B'; showHome(); };
   }
+
+  // Tappable exercise rows: jump within an active session, or start a new
+  // session right at that exercise. The warm-up card always starts fresh.
+  const onRow = (handler) => (el) => {
+    if (!el) return;
+    el.onclick = handler;
+    el.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handler(); } };
+  };
+  onRow(() => active ? jumpToExercise(0) : startWorkout(displayType, 0, false))(document.getElementById('row-warmup'));
+  session.exercises.forEach((ex, i) => {
+    onRow(() => active ? jumpToExercise(i) : startWorkout(displayType, i, true))(document.getElementById('row-' + i));
+  });
 }
 
-function startWorkout(type) {
+function startWorkout(type, startExIndex = 0, skipWarmup = false) {
   const state = {
     type,
     startedAt: new Date().toISOString(),
-    exIndex: 0,
+    exIndex: startExIndex,
     setIndex: 0,
-    warmupIndex: 0,
+    // warm-ups only ever precede the first exercise; jumping straight into
+    // any exercise (or starting past the first) skips them.
+    warmupIndex: skipWarmup || startExIndex > 0 ? WARMUPS.length : 0,
     log: ROUTINE[type].exercises.map(ex => ({ id: ex.id, name: ex.name, unit: ex.unit || 'kg', sets: [] }))
   };
+  saveActive(state);
+  showExercise(state);
+}
+
+// Manual override from the home screen: jump to any exercise of the
+// in-progress session, resuming at the next unlogged set. Drops any
+// pending rest and the warm-up (warm-ups belong to the start only).
+function jumpToExercise(exIndex) {
+  const state = loadActive();
+  if (!state) return;
+  state.exIndex = exIndex;
+  state.setIndex = state.log[exIndex].sets.length;
+  state.warmupIndex = WARMUPS.length;
+  delete state.rest;
   saveActive(state);
   showExercise(state);
 }
