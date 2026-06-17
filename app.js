@@ -163,6 +163,42 @@ function render(html) {
   app.innerHTML = html;
 }
 
+const HOME_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>';
+
+// Top navigation bar shared by the exercise and rest screens: a home icon
+// (returns to the home screen, keeping the session so it can be resumed) and
+// an optional "back one step" button. Handlers are wired by the caller.
+function navBarHTML(showBack) {
+  return `
+    <div class="ex-topbar">
+      <button class="icon-btn" id="go-home" aria-label="Ir al inicio" title="Inicio">${HOME_ICON}</button>
+      ${showBack ? '<button class="icon-btn back-step" id="back-step">‹ Atrás</button>' : ''}
+    </div>`;
+}
+
+// Step back one move in the session and revert it: from a rest, undo the set
+// (or warm-up) that triggered it and reopen that set; the caller decides when
+// to use it. Keeps the saved log consistent so progression stays correct.
+function backToPreviousSet(state) {
+  clearInterval(restInterval);
+  if (state.rest && state.rest.fromWarmup) {
+    state.warmupIndex = Math.max(0, (state.warmupIndex || 0) - 1);
+  } else {
+    if (state.rest && state.rest.change) {
+      // The rest followed the last set of the previous exercise.
+      state.exIndex = Math.max(0, state.exIndex - 1);
+      state.setIndex = ROUTINE[state.type].exercises[state.exIndex].sets - 1;
+    } else {
+      state.setIndex = Math.max(0, state.setIndex - 1);
+    }
+    const entry = state.log[state.exIndex];
+    if (entry && entry.sets.length) entry.sets.pop();   // un-log it so it can be redone
+  }
+  delete state.rest;
+  saveActive(state);
+  showExercise(state);
+}
+
 // Which session the home screen is previewing. Defaults to the A/B
 // alternation pick, but the user can override it with the toggle.
 let selectedType = null;
@@ -170,14 +206,18 @@ let selectedType = null;
 function showHome() {
   const nextType = nextSessionType();
   const active = loadActive();
-  const displayType = active ? active.type : (selectedType || nextType);
+  // The toggle always wins; otherwise default to the active session's type, or
+  // the alternation pick. previewingActive = the previewed list IS the running
+  // session, so jump/highlight apply; otherwise the rows just start a new one.
+  const displayType = selectedType || (active ? active.type : nextType);
+  const previewingActive = !!active && active.type === displayType;
   const session = ROUTINE[displayType];
   const history = loadHistory();
   const last = history[history.length - 1];
 
   let progressDesc = '';
   if (active) {
-    const curEx = session.exercises[active.exIndex];
+    const curEx = ROUTINE[active.type].exercises[active.exIndex];
     if (inWarmup(active)) {
       progressDesc = `Calentamiento ${(active.warmupIndex || 0) + 1} de ${WARMUPS.length} · ${curEx.name}`;
     } else {
@@ -188,20 +228,19 @@ function showHome() {
   render(`
     <div class="screen">
       <div class="logo">LazyGood</div>
+      <div>
+        <div class="seg-control" role="tablist" aria-label="Elegir sesión">
+          <button class="seg${displayType === 'A' ? ' active' : ''}" id="seg-A" role="tab" aria-selected="${displayType === 'A'}">Sesión A</button>
+          <button class="seg${displayType === 'B' ? ' active' : ''}" id="seg-B" role="tab" aria-selected="${displayType === 'B'}">Sesión B</button>
+        </div>
+        <div class="home-sub">${todayStr()}${last ? ` · última: ${new Date(last.date).toLocaleDateString('es-CO')}` : ''} · recomendada hoy: <strong>Sesión ${nextType}</strong></div>
+      </div>
       ${active ? `
         <div class="card session-progress">
-          <div class="sp-session">${session.label} en curso</div>
+          <div class="sp-session">${ROUTINE[active.type].label} en curso</div>
           <div class="sp-step">${progressDesc}</div>
         </div>
-      ` : `
-        <div>
-          <div class="seg-control" role="tablist" aria-label="Elegir sesión">
-            <button class="seg${displayType === 'A' ? ' active' : ''}" id="seg-A" role="tab" aria-selected="${displayType === 'A'}">Sesión A</button>
-            <button class="seg${displayType === 'B' ? ' active' : ''}" id="seg-B" role="tab" aria-selected="${displayType === 'B'}">Sesión B</button>
-          </div>
-          <div class="home-sub">${todayStr()}${last ? ` · última: ${new Date(last.date).toLocaleDateString('es-CO')}` : ''} · recomendada hoy: <strong>Sesión ${nextType}</strong></div>
-        </div>
-      `}
+      ` : ''}
       <details class="info-box">
         <summary>¿Cómo elijo el peso y las reps?</summary>
         <div class="info-content">
@@ -224,7 +263,7 @@ function showHome() {
           </div>
         </div>
         ${session.exercises.map((ex, i) => `
-          <div class="exercise-row tappable${active && active.exIndex === i && !inWarmup(active) ? ' current-ex' : ''}" id="row-${i}" role="button" tabindex="0">
+          <div class="exercise-row tappable${previewingActive && active.exIndex === i && !inWarmup(active) ? ' current-ex' : ''}" id="row-${i}" role="button" tabindex="0">
             <img src="${ex.imgs[0]}" alt="">
             <div>
               <div class="ex-name">${ex.name}</div>
@@ -233,11 +272,11 @@ function showHome() {
             <span class="row-go" aria-hidden="true">›</span>
           </div>`).join('')}
       </div>
-      <div class="list-hint">${active ? 'Toca un ejercicio para saltar a él' : 'Toca un ejercicio para empezar ahí'}</div>
+      <div class="list-hint">${previewingActive ? 'Toca un ejercicio para saltar a él' : 'Toca un ejercicio para empezar ahí'}</div>
       <div class="spacer"></div>
       ${active ? `
-        <button class="btn btn-primary btn-big" id="resume">Retomar sesión</button>
-        <button class="btn btn-secondary" id="start">Empezar sesión nueva</button>
+        <button class="btn btn-primary btn-big" id="resume">Retomar ${ROUTINE[active.type].label}</button>
+        <button class="btn btn-secondary" id="start">Empezar ${session.label} nueva</button>
         <button class="btn btn-ghost" id="cancel">Cancelar sesión actual</button>
       ` : `
         <button class="btn btn-primary btn-big" id="start">Empezar ${session.label}</button>
@@ -247,7 +286,18 @@ function showHome() {
     </div>
   `);
 
-  document.getElementById('start').onclick = () => startWorkout(displayType);
+  // A/B toggle — always available, even mid-session (it only previews; it
+  // doesn't touch the running session until you choose to start a new one).
+  document.getElementById('seg-A').onclick = () => { selectedType = 'A'; showHome(); };
+  document.getElementById('seg-B').onclick = () => { selectedType = 'B'; showHome(); };
+
+  // Starting fresh discards any in-progress session — confirm first.
+  const startFresh = (index, skipWarmup) => {
+    if (active && !confirm('Tienes una sesión en curso. ¿Empezar una nueva y descartar el progreso?')) return;
+    startWorkout(displayType, index, skipWarmup);
+  };
+
+  document.getElementById('start').onclick = () => startFresh(0, false);
   document.getElementById('history').onclick = showHistory;
 
   if (active) {
@@ -256,25 +306,22 @@ function showHome() {
       if (st.rest) showRest(st); else showExercise(st);
     };
     document.getElementById('cancel').onclick = () => {
+      if (!confirm('¿Cancelar la sesión actual? Se perderá el progreso.')) return;
       clearActive();
       showHome();
     };
-  } else {
-    // A/B toggle — overrides the alternation pick for this preview.
-    document.getElementById('seg-A').onclick = () => { selectedType = 'A'; showHome(); };
-    document.getElementById('seg-B').onclick = () => { selectedType = 'B'; showHome(); };
   }
 
-  // Tappable exercise rows: jump within an active session, or start a new
-  // session right at that exercise. The warm-up card always starts fresh.
+  // Tappable rows: jump within the running session (only when the previewed
+  // list IS that session), otherwise start a new session at that exercise.
   const onRow = (handler) => (el) => {
     if (!el) return;
     el.onclick = handler;
     el.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handler(); } };
   };
-  onRow(() => active ? jumpToExercise(0) : startWorkout(displayType, 0, false))(document.getElementById('row-warmup'));
+  onRow(() => previewingActive ? jumpToExercise(0) : startFresh(0, false))(document.getElementById('row-warmup'));
   session.exercises.forEach((ex, i) => {
-    onRow(() => active ? jumpToExercise(i) : startWorkout(displayType, i, true))(document.getElementById('row-' + i));
+    onRow(() => previewingActive ? jumpToExercise(i) : startFresh(i, true))(document.getElementById('row-' + i));
   });
 }
 
@@ -328,6 +375,7 @@ function showExercise(state) {
 
   render(`
     <div class="screen workout${warmup ? ' warmup-active' : ''}">
+      ${navBarHTML(!!state.rest)}
       <div class="progress-bar">
         ${segments.map((seg, i) => {
           const color = seg.wu ? 'wu' : 'ex' + (seg.ex % 6);
@@ -382,8 +430,6 @@ function showExercise(state) {
         </div>
       </div>
       <button class="btn btn-primary btn-big" id="done-set">${warmup ? 'Calentamiento hecho' : 'Serie hecha'}</button>
-      ${state.rest ? '<button class="btn btn-ghost" id="back-rest">Volver al descanso</button>' : ''}
-      <button class="btn btn-ghost" id="abort">Salir de la sesión</button>
       <div class="muscles-bottom">
         <div class="muscle-maps">${muscleMapsHTML(ex)}</div>
         <div class="muscles">
@@ -408,7 +454,7 @@ function showExercise(state) {
   document.getElementById('done-set').onclick = () => {
     if (warmup) {
       state.warmupIndex = (state.warmupIndex || 0) + 1;
-      startRest(state, WARMUP_REST_SEC, false);
+      startRest(state, WARMUP_REST_SEC, false, true);
       return;
     }
 
@@ -433,25 +479,26 @@ function showExercise(state) {
     }
   };
 
-  const backRest = document.getElementById('back-rest');
-  if (backRest) backRest.onclick = () => {
-    // If the original rest already expired, restart it full; otherwise resume.
+  document.getElementById('go-home').onclick = () => showHome();
+
+  // Back from an exercise → the rest that preceded it (restart it if it had
+  // already run out, otherwise resume the remaining time).
+  const backStep = document.getElementById('back-step');
+  if (backStep) backStep.onclick = () => {
     if (state.rest.endAt <= Date.now()) {
       state.rest.endAt = Date.now() + state.rest.total * 1000;
       saveActive(state);
     }
     showRest(state);
   };
-
-  document.getElementById('abort').onclick = () => showHome();
 }
 
 let restInterval = null;
 
 // Rest state is stored on the session so the exercise screen can return to it
 // (e.g. after skipping by mistake) and so a reload mid-rest keeps the timer.
-function startRest(state, seconds, isExerciseChange) {
-  state.rest = { endAt: Date.now() + seconds * 1000, total: seconds, change: !!isExerciseChange };
+function startRest(state, seconds, isExerciseChange, fromWarmup) {
+  state.rest = { endAt: Date.now() + seconds * 1000, total: seconds, change: !!isExerciseChange, fromWarmup: !!fromWarmup };
   saveActive(state);
   showRest(state);
 }
@@ -462,6 +509,8 @@ function showRest(state) {
 
   render(`
     <div class="screen rest-screen">
+      ${navBarHTML(true)}
+      <div class="rest-body">
       <div class="rest-title">${state.rest.change ? 'Descansa antes del siguiente ejercicio' : 'Descansa'}</div>
       <div class="rest-clock" id="clock">--:--</div>
       <div class="rest-ring"><div id="ring" style="width:100%"></div></div>
@@ -472,8 +521,12 @@ function showRest(state) {
         <button class="btn btn-secondary" id="minus30">−30 s</button>
         <button class="btn btn-primary" id="skip">Saltar descanso</button>
       </div>
+      </div>
     </div>
   `);
+
+  document.getElementById('go-home').onclick = () => { clearInterval(restInterval); showHome(); };
+  document.getElementById('back-step').onclick = () => backToPreviousSet(state);
 
   const clock = document.getElementById('clock');
   const ring = document.getElementById('ring');

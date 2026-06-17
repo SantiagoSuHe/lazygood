@@ -270,6 +270,28 @@ details[open].info-box summary::before { content: '–'; }
 .credits a { color: var(--mid); text-decoration: underline; text-underline-offset: 2px; }
 
 /* ── workout ─────────────────────────────────────────── */
+/* top nav bar (home + back one step) — shared by exercise & rest screens */
+.ex-topbar {
+  display: flex; align-items: center; gap: 10px;
+  flex-shrink: 0;
+}
+.icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 4px;
+  height: 40px; min-width: 40px; padding: 0 14px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--sep);
+  border-radius: var(--pill);
+  box-shadow: var(--shadow-sm);
+  font-family: var(--font-head); font-weight: 700; font-size: 0.9rem;
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.18s ease;
+}
+.icon-btn:active { transform: scale(0.94); background: var(--surface-2); }
+.icon-btn:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.icon-btn.back-step { margin-left: auto; color: var(--mid); }
+
 .progress-bar { display: flex; gap: 5px; padding: 3px 0; }
 .progress-bar span {
   flex: 1; height: 6px; border-radius: var(--pill);
@@ -462,7 +484,12 @@ details[open].cues-box summary::before { content: '– '; }
 .warmup-active .ex-header .machine { color: var(--blue); }
 
 /* ── rest ────────────────────────────────────────────── */
-.rest-screen { justify-content: center; text-align: center; gap: 18px; }
+.rest-screen { text-align: center; gap: 12px; }
+.rest-screen .rest-body {
+  flex: 1; min-height: 0;
+  display: flex; flex-direction: column; justify-content: center;
+  gap: 18px;
+}
 
 .rest-title {
   font-family: var(--font-head);
